@@ -9,27 +9,43 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/zzsxd/test.git'
+                checkout scm
             }
         }
 
         stage('Build Docker Image') {
             steps {
                 script {
-                    // На macOS может потребоваться явно указать демон Docker
-                    dockerImage = docker.build("${env.DOCKER_IMAGE}:${env.BUILD_ID}")
+                    // Пробуем разные возможные пути к Docker
+                    sh '''
+                        # Пробуем разные расположения Docker
+                        if [ -x "/usr/local/bin/docker" ]; then
+                            /usr/local/bin/docker build -t ${DOCKER_IMAGE}:${BUILD_ID} .
+                        elif [ -x "/opt/homebrew/bin/docker" ]; then
+                            /opt/homebrew/bin/docker build -t ${DOCKER_IMAGE}:${BUILD_ID} .
+                        elif [ -x "/Applications/Docker.app/Contents/Resources/bin/docker" ]; then
+                            /Applications/Docker.app/Contents/Resources/bin/docker build -t ${DOCKER_IMAGE}:${BUILD_ID} .
+                        else
+                            echo "Docker not found in standard locations"
+                            exit 1
+                        fi
+                    '''
                 }
             }
         }
 
-        stage('Run Tests') {
+        stage('Test Application') {
             steps {
                 script {
-                    // Для простого PHP-приложения можно запустить базовые проверки
-                    dockerImage.inside("--rm") {
-                        sh 'php -v'
-                        sh 'php -l /var/www/html/index.php'
-                    }
+                    sh '''
+                        if [ -x "/usr/local/bin/docker" ]; then
+                            /usr/local/bin/docker run --rm ${DOCKER_IMAGE}:${BUILD_ID} php -v
+                            /usr/local/bin/docker run --rm ${DOCKER_IMAGE}:${BUILD_ID} php -l /var/www/html/index.php
+                        elif [ -x "/opt/homebrew/bin/docker" ]; then
+                            /opt/homebrew/bin/docker run --rm ${DOCKER_IMAGE}:${BUILD_ID} php -v
+                            /opt/homebrew/bin/docker run --rm ${DOCKER_IMAGE}:${BUILD_ID} php -l /var/www/html/index.php
+                        fi
+                    '''
                 }
             }
         }
@@ -37,27 +53,34 @@ pipeline {
         stage('Push Docker Image') {
             steps {
                 script {
+                    // Для пуш используем plugin который может найти Docker
                     docker.withRegistry('https://index.docker.io/v1/', "${env.DOCKER_CREDENTIALS_ID}") {
-                        dockerImage.push("${env.BUILD_ID}")
-                        dockerImage.push('latest')
+                        // Собираем образ заново через plugin
+                        def customImage = docker.build("${env.DOCKER_IMAGE}:${env.BUILD_ID}")
+                        customImage.push("${env.BUILD_ID}")
+                        customImage.push('latest')
                     }
                 }
             }
         }
 
-        stage('Deploy') {
+        stage('Deploy to Local') {
             steps {
                 script {
-                    // Останавливаем и удаляем старый контейнер
                     sh '''
-                        docker stop my-php-app || true
-                        docker rm my-php-app || true
+                        # Останавливаем старый контейнер
+                        if [ -x "/usr/local/bin/docker" ]; then
+                            /usr/local/bin/docker stop my-running-app || true
+                            /usr/local/bin/docker rm my-running-app || true
+                            /usr/local/bin/docker run -d -p 8081:80 --name my-running-app ${DOCKER_IMAGE}:${BUILD_ID}
+                        elif [ -x "/opt/homebrew/bin/docker" ]; then
+                            /opt/homebrew/bin/docker stop my-running-app || true
+                            /opt/homebrew/bin/docker rm my-running-app || true
+                            /opt/homebrew/bin/docker run -d -p 8081:80 --name my-running-app ${DOCKER_IMAGE}:${BUILD_ID}
+                        fi
                     '''
-                    // Запускаем новый контейнер
-                    sh """
-                        docker run -d -p 8081:80 --name my-php-app ${env.DOCKER_IMAGE}:${env.BUILD_ID}
-                    """
-                    echo "Приложение развернуто и доступно по http://localhost:8081"
+                    echo "🚀 Application deployed!"
+                    echo "📱 Access: http://localhost:8081"
                 }
             }
         }
@@ -65,14 +88,19 @@ pipeline {
 
     post {
         always {
-            sh 'docker image prune -f'
+            sh '''
+                if [ -x "/usr/local/bin/docker" ]; then
+                    /usr/local/bin/docker image prune -f
+                elif [ -x "/opt/homebrew/bin/docker" ]; then
+                    /opt/homebrew/bin/docker image prune -f
+                fi
+            '''
         }
         success {
-            echo 'Pipeline успешно завершен!'
-            echo 'Приложение доступно по: http://localhost:8081'
+            echo '✅ Pipeline succeeded!'
         }
         failure {
-            echo 'Pipeline завершился с ошибкой!'
+            echo '❌ Pipeline failed!'
         }
     }
 }
