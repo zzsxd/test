@@ -4,7 +4,6 @@ pipeline {
     environment {
         DOCKER_IMAGE = 'zzsxdd/my-php-app'
         DOCKER_CREDENTIALS_ID = 'docker-hub-credentials'
-        PATH = "/opt/homebrew/bin:${env.PATH}"
     }
 
     stages {
@@ -17,7 +16,7 @@ pipeline {
         stage('Build') {
             steps {
                 script {
-                    sh 'docker build -t ${DOCKER_IMAGE}:${BUILD_ID} .'
+                    sh '/opt/homebrew/bin/docker build -t ${DOCKER_IMAGE}:${BUILD_ID} .'
                 }
             }
         }
@@ -25,7 +24,7 @@ pipeline {
         stage('Test') {
             steps {
                 script {
-                    sh 'docker run --rm ${DOCKER_IMAGE}:${BUILD_ID} php -v'
+                    sh '/opt/homebrew/bin/docker run --rm ${DOCKER_IMAGE}:${BUILD_ID} php -v'
                 }
             }
         }
