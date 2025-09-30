@@ -13,17 +13,18 @@ pipeline {
             }
         }
 
-        stage('Build and Test') {
+        stage('Build') {
             steps {
                 script {
-                    // Используем docker.build из Docker Pipeline plugin
-                    dockerImage = docker.build("${env.DOCKER_IMAGE}:${env.BUILD_ID}")
-                    
-                    // Тестируем образ
-                    dockerImage.inside {
-                        sh 'php -v'
-                        sh 'apache2 -v'
-                    }
+                    sh 'docker build -t ${DOCKER_IMAGE}:${BUILD_ID} .'
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                script {
+                    sh 'docker run --rm ${DOCKER_IMAGE}:${BUILD_ID} php -v'
                 }
             }
         }
@@ -32,27 +33,10 @@ pipeline {
             steps {
                 script {
                     docker.withRegistry('https://index.docker.io/v1/', "${env.DOCKER_CREDENTIALS_ID}") {
-                        dockerImage.push("${env.BUILD_ID}")
-                        dockerImage.push('latest')
+                        sh 'docker push ${DOCKER_IMAGE}:${BUILD_ID}'
                     }
                 }
             }
-        }
-
-        stage('Deploy') {
-            steps {
-                script {
-                    sh 'docker stop my-php-app || true'
-                    sh 'docker rm my-php-app || true'
-                    sh "docker run -d -p 8080:80 --name my-php-app ${env.DOCKER_IMAGE}:${env.BUILD_ID}"
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            cleanWs()
         }
     }
 }
