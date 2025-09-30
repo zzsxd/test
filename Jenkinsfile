@@ -4,6 +4,7 @@ pipeline {
     environment {
         DOCKER_IMAGE = 'zzsxdd/my-php-app'
         DOCKER_CREDENTIALS_ID = 'docker-hub-credentials'
+        PATH = "/Applications/Docker.app/Contents/Resources/bin:/opt/homebrew/bin:${env.PATH}"
     }
 
     stages {
