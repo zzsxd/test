@@ -4,6 +4,7 @@ pipeline {
     environment {
         DOCKER_IMAGE = 'zzsxdd/my-php-app'
         DOCKER_CREDENTIALS_ID = 'docker-hub-credentials'
+        PATH = "/opt/homebrew/bin:${env.PATH}"
     }
 
     stages {
@@ -28,15 +29,11 @@ pipeline {
                 }
             }
         }
-
-        stage('Push') {
-            steps {
-                script {
-                    docker.withRegistry('https://index.docker.io/v1/', "${env.DOCKER_CREDENTIALS_ID}") {
-                        sh 'docker push ${DOCKER_IMAGE}:${BUILD_ID}'
-                    }
-                }
-            }
+    }
+    
+    post {
+        always {
+            echo 'Pipeline completed'
         }
     }
 }
